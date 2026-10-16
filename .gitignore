@@ -1,0 +1,10 @@
+.DS_Store
+*.code-workspace
+__pycache__/
+.venv/
+# secrets and local state
+.env
+state.json
+# fetched sample content and generated output
+samples/
+out/
