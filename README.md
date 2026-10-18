@@ -46,6 +46,14 @@ python3 -m feishu2pub wechat '<飞书链接>'             # 写入公众号草�
 
 同一篇飞书文档再次运行会更新同一篇草稿（映射存在本地 `state.json`），图片按内容去重，不会重复上传。
 
+## Claude Code skill
+
+`skills/feishu2pub/` 是给 Claude Code 用的 skill，装上后可以直接说「把这篇飞书文档发到公众号草稿」：
+
+```bash
+ln -s "$PWD/skills/feishu2pub" ~/.claude/skills/feishu2pub
+```
+
 ## 测试
 
 ```bash

@@ -24,6 +24,8 @@ Python 3.11，依赖见 `requirements.txt`（`httpx`、`Pillow`、`matplotlib`�
 - `feishu2pub/images.py`：画板裁白边转无损 PNG；`shrink()` 把图片压到微信的 1MB 以内。
 - `feishu2pub/state.py`：`.env`、`out/`、`state.json` 的位置和读写。
 
+Claude Code skill 在 `skills/feishu2pub/SKILL.md`，通过软链接装到 `~/.claude/skills/`。改了命令或排错方式要同步更新它。
+
 知乎：`zhihu.py`（最小客户端，只用 Cookie，草稿增改、OSS 直传图片）、`zhihu_cli.py`。
 
 微信：`wechat.py`（官方接口客户端）、`wechat_convert.py`（继承 `Converter`）、`wechat_cli.py`。
