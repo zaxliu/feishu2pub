@@ -1,40 +1,24 @@
-"""feishu2zhihu: import a Feishu doc into a Zhihu article draft (never publishes).
+"""Import a Feishu doc into a Zhihu article draft (never publishes).
 
-    python -m feishu2zhihu.cli <feishu docx/wiki URL> [--dry-run] [--new]
+    python -m feishu2pub zhihu <feishu docx/wiki URL> [--dry-run] [--new]
 """
 
 from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import sys
 from concurrent.futures import ThreadPoolExecutor
-from pathlib import Path
 from typing import Optional
 
 from . import feishu
 from .convert import Converter, ImageRef, collect_images
 from .images import prepare
+from .state import OUT, ROOT, load_state, save_state
 from .zhihu import Zhihu, ZhihuError, load_env
 
-ROOT = Path(__file__).resolve().parent.parent
-STATE = ROOT / "state.json"
-OUT = ROOT / "out"
-
-
-def load_state() -> dict:
-    return json.loads(STATE.read_text()) if STATE.is_file() else {"docs": {}, "images": {}}
-
-
-def save_state(state: dict) -> None:
-    tmp = STATE.with_suffix(".tmp")
-    tmp.write_text(json.dumps(state, ensure_ascii=False, indent=2))
-    tmp.replace(STATE)
-
-
 def main(argv: Optional[list[str]] = None) -> int:
-    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap = argparse.ArgumentParser(prog="feishu2pub zhihu", description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("doc", help="Feishu docx or wiki URL / token")
     ap.add_argument("--dry-run", action="store_true", help="convert locally, skip all Zhihu calls")
     ap.add_argument("--new", action="store_true", help="create a new draft even if one is mapped")

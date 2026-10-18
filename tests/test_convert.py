@@ -1,4 +1,4 @@
-from feishu2zhihu.convert import Converter, ImageRef, collect_images
+from feishu2pub.convert import Converter, ImageRef, collect_images
 
 
 def conv(xml, images=None):

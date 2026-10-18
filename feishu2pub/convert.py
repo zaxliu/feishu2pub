@@ -165,6 +165,17 @@ class Converter:
     def warn(self, msg: str) -> None:
         self.warnings[msg] += 1
 
+    # -- output hooks (overridden by other targets, e.g. WeChat)
+
+    def equation(self, tex: str, block: bool) -> str:
+        return equation(tex, block)
+
+    def link(self, href: str, body: str) -> str:
+        return f'<a href="{esc_attr(href)}">{body}</a>'
+
+    def figure(self, info: dict, caption: str) -> str:
+        return image_html(info, caption)
+
     def convert(self, xml: str) -> str:
         root = parse(xml)
         levels = [int(HEADING.match(n.tag).group(1)) for n in walk(root) if HEADING.match(n.tag)]
@@ -241,7 +252,7 @@ class Converter:
     def paragraph(self, n: Node) -> str:
         meaningful = [c for c in n.children if not is_blank(c)]
         if len(meaningful) == 1 and isinstance(meaningful[0], Node) and meaningful[0].tag == "latex":
-            return f"<p>{equation(self.text(meaningful[0]), block=True)}</p>"
+            return f"<p>{self.equation(self.text(meaningful[0]), block=True)}</p>"
         # Images may sit inside a paragraph; Zhihu needs them as separate figures.
         out: list[str] = []
         run: list = []
@@ -382,7 +393,7 @@ class Converter:
         if not info:
             self.warn("有图片下载或上传失败，已用占位文字代替")
             return f"<p>[图片缺失：{esc(ref.token if ref else n.tag)}]</p>"
-        return image_html(info, n.attrs.get("caption", ""))
+        return self.figure(info, n.attrs.get("caption", ""))
 
     # -- inline level
 
@@ -406,9 +417,9 @@ class Converter:
             elif t == "a":
                 href = c.attrs.get("href", "")
                 body = self.inline(c.children) or esc(href)
-                out.append(f'<a href="{esc_attr(href)}">{body}</a>' if href else body)
+                out.append(self.link(href, body) if href else body)
             elif t == "latex":
-                out.append(equation(self.text(c), block=False))
+                out.append(self.equation(self.text(c), block=False))
             elif t == "br":
                 out.append("<br/>")
             elif t == "cite":

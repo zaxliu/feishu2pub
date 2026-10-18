@@ -55,3 +55,32 @@ def prepare(path: Path, trim: bool) -> Prepared:
             mime, ext = PASSTHROUGH[im.format]
             return Prepared(raw, mime, ext, im.width, im.height)
         return Prepared(_png(im), "image/png", "png", im.width, im.height)
+
+
+WECHAT_LIMIT = 1_000_000  # media/uploadimg accepts jpg/png under 1MB
+
+
+def shrink(p: Prepared, limit: int = WECHAT_LIMIT) -> Prepared:
+    """Fit WeChat's upload limit, keeping diagrams sharp where possible.
+
+    Order: keep as is -> palette PNG (lossless-looking for whiteboards) ->
+    JPEG at decreasing quality and scale.
+    """
+    if p.ext in ("jpg", "png") and len(p.data) < limit:
+        return p
+    with Image.open(io.BytesIO(p.data)) as im:
+        im.load()
+        rgb = im.convert("RGB")
+    if p.ext in ("png", "gif"):
+        data = _png(rgb.quantize(256))
+        if len(data) < limit:
+            return Prepared(data, "image/png", "png", rgb.width, rgb.height)
+    for scale in (1.0, 0.85, 0.7, 0.55):
+        cur = rgb if scale == 1.0 else rgb.resize(
+            (int(rgb.width * scale), int(rgb.height * scale)), Image.Resampling.LANCZOS)
+        for quality in (90, 82, 75):
+            buf = io.BytesIO()
+            cur.save(buf, "JPEG", quality=quality, optimize=True)
+            if buf.tell() < limit:
+                return Prepared(buf.getvalue(), "image/jpeg", "jpg", cur.width, cur.height)
+    raise ValueError("image cannot be shrunk below the WeChat upload limit")

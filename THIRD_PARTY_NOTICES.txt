@@ -1,4 +1,4 @@
-feishu2zhihu/zhihu.py adapts code from the following projects.
+feishu2pub/zhihu.py adapts code from the following projects.
 
 == zhihu-cli (https://github.com/KrisTHL181/zhihu-cli) ==
 
