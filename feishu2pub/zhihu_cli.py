@@ -12,7 +12,7 @@ from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 from . import feishu
-from .convert import Converter, ImageRef, collect_images
+from .convert import Converter, ImageRef, collect_images, drop_section
 from .images import prepare
 from .state import OUT, ROOT, load_state, save_state
 from .zhihu import Zhihu, ZhihuError, load_env
@@ -23,6 +23,8 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="convert locally, skip all Zhihu calls")
     ap.add_argument("--new", action="store_true", help="create a new draft even if one is mapped")
     ap.add_argument("--no-trim", action="store_true", help="keep whiteboard margins")
+    ap.add_argument("--drop-section", action="append", default=[],
+                    help="leave out the section whose h1 contains this text (repeatable, e.g. 附录)")
     args = ap.parse_args(argv)
 
     load_env(ROOT / ".env")
@@ -67,6 +69,9 @@ def main(argv: Optional[list[str]] = None) -> int:
 
     conv = Converter(lambda ref: resolved.get(ref))
     body = conv.convert(doc["xml"])
+    for needle in args.drop_section:
+        body, n = drop_section(body, needle)
+        print(f"  dropped {n} section(s) with heading containing {needle!r}")
     title = conv.title or "未命名"
     work.mkdir(parents=True, exist_ok=True)
     (work / "article.html").write_text(

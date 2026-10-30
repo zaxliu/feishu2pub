@@ -47,6 +47,35 @@ def norm_tex(tex: str) -> str:
     return " ".join(tex.split())
 
 
+# mathtext has no \text; route it to the sans slot, which render_formula points at a CJK font.
+TEXT_CMD = re.compile(r"\\text\{([^{}]*)\}")
+CJK_FONTS = ("PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC", "Source Han Sans SC",
+             "Microsoft YaHei", "Arial Unicode MS")
+
+
+# LaTeX aliases mathtext doesn't know.
+ALIASES = re.compile(r"\\(le|ge)(?![A-Za-z])")
+# \underbrace{x}_{label} -> \underset{label}{x}; label may hold one level of braces (\text{...}).
+UNDERBRACE = re.compile(r"\\underbrace\{([^{}]*)\}_\{((?:[^{}]|\{[^{}]*\})*)\}")
+
+
+BMOD = re.compile(r"\\bmod(?![A-Za-z])")
+
+
+def mathtext_source(tex: str) -> str:
+    tex = BMOD.sub(r"\\ \\mathrm{mod}\\ ", tex)
+    tex = ALIASES.sub(lambda m: "\\" + m.group(1) + "q", tex)
+    tex = UNDERBRACE.sub(lambda m: r"\underset{" + m.group(2) + "}{" + m.group(1) + "}", tex)
+    return TEXT_CMD.sub(lambda m: r"\mathsf{" + m.group(1).replace(" ", r"\ ") + "}", tex)
+
+
+def _cjk_font() -> Optional[str]:
+    from matplotlib import font_manager
+
+    names = {f.name for f in font_manager.fontManager.ttflist}
+    return next((n for n in CJK_FONTS if n in names), None)
+
+
 def render_formula(tex: str, fontsize: int = 15) -> bytes:
     """Render LaTeX to PNG with matplotlib mathtext (no network, no TeX install)."""
     import matplotlib
@@ -54,18 +83,24 @@ def render_formula(tex: str, fontsize: int = 15) -> bytes:
     matplotlib.use("Agg")
     from matplotlib import pyplot as plt
 
-    fig = plt.figure()
-    fig.text(0, 0, f"${tex}$", fontsize=fontsize)
-    buf = io.BytesIO()
-    fig.savefig(buf, dpi=RENDER_DPI, format="png", bbox_inches="tight", pad_inches=0.04, transparent=False)
-    plt.close(fig)
+    rc = {"mathtext.fontset": "custom", "mathtext.rm": "STIXGeneral", "mathtext.it": "STIXGeneral:italic",
+          "mathtext.bf": "STIXGeneral:bold", "mathtext.fallback": "stix"}
+    if font := _cjk_font():
+        rc["mathtext.sf"] = font
+    with matplotlib.rc_context(rc):
+        fig = plt.figure()
+        fig.text(0, 0, f"${mathtext_source(tex)}$", fontsize=fontsize)
+        buf = io.BytesIO()
+        fig.savefig(buf, dpi=RENDER_DPI, format="png", bbox_inches="tight", pad_inches=0.04, transparent=False)
+        plt.close(fig)
     return buf.getvalue()
 
 
 class WechatConverter(Converter):
-    def __init__(self, resolve: Resolver, formula: FormulaResolver):
+    def __init__(self, resolve: Resolver, formula: FormulaResolver, link_urls: bool = True):
         super().__init__(resolve)
         self.formula = formula
+        self.link_urls = link_urls
 
     def equation(self, tex: str, block: bool) -> str:
         tex = norm_tex(tex)
@@ -81,9 +116,12 @@ class WechatConverter(Converter):
 
     def link(self, href: str, body: str) -> str:
         # WeChat strips <a> to anything but its own articles; keep the URL readable.
-        self.warn("外链在公众号里不能点击，已在链接文字后附上网址")
         if esc(href) == body:
             return f'<span style="word-break:break-all;">{body}</span>'
+        if not self.link_urls:
+            self.warn("外链在公众号里不能点击，为控制字数只保留了链接文字")
+            return body
+        self.warn("外链在公众号里不能点击，已在链接文字后附上网址")
         return f'{body}<br/><span style="color:#888;font-size:13px;word-break:break-all;">{esc(href)}</span>'
 
     def figure(self, info: dict, caption: str) -> str:
@@ -105,3 +143,17 @@ def style(html: str) -> str:
     for tag, css in STYLES.items():
         html = html.replace(f"<{tag}>", f'<{tag} style="{css}">')
     return html
+
+
+def cut_at_heading(html: str, needle: str, note: str) -> tuple[str, int]:
+    """Drop everything from the first <h2> whose text contains `needle`; append `note` as a paragraph.
+
+    Returns (html, number of headings dropped). Used to fit WeChat's 20000-character limit
+    by leaving appendices to the full article behind 阅读原文.
+    """
+    heads = list(re.finditer(r"<h2[^>]*>(.*?)</h2>", html, re.S))
+    start = next((m.start() for m in heads if needle in re.sub(r"<[^>]+>", "", m.group(1))), None)
+    if start is None:
+        return html, 0
+    dropped = sum(1 for m in heads if m.start() >= start)
+    return html[:start] + f'<p style="{STYLES["p"]}color:#888;">{esc(note)}</p>', dropped

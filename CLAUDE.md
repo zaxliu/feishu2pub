@@ -9,6 +9,7 @@ python3 -m feishu2pub zhihu  <飞书URL>             # 导入或更新知乎草�
 python3 -m feishu2pub wechat <飞书URL>             # 导入或更新公众号草稿
 python3 -m feishu2pub zhihu  <飞书URL> --dry-run   # 只拉取和转换，不碰平台，输出 out/<doc_id>/article.html（wechat 为 wechat.html）
 python3 -m feishu2pub zhihu  <飞书URL> --new       # 忽略已有映射，新建一篇草稿
+python3 -m feishu2pub zhihu  <飞书URL> --drop-section 附录   # 去掉标题含「附录」的那一节，后面的节重新编号（wechat 同样支持）
 python3 -m pytest -q tests                         # 转换器单测（离线）
 ```
 
@@ -48,7 +49,7 @@ Claude Code skill 在 `skills/feishu2pub/SKILL.md`，通过软链接装到 `~/.c
 ## 微信公众号：已验证的平台行为（个人主体账号）
 
 - `wechat.py` 走官方接口：`stable_token`、`media/uploadimg`（正文图）、`material/add_material`（封面）、`draft/add|update|get`。个人主体没有发布接口权限，只写草稿。需要 `.env` 里的 `WECHAT_APPID`、`WECHAT_APPSECRET`，本机公网 IP 要在微信开发者平台的 API IP 白名单里，否则报 40164。
-- `wechat_convert.py` 继承 `Converter`：外链会被微信去掉，改为在链接文字后附纯文本网址；公式用 matplotlib 渲染成 PNG 上传；样式全部写成内联 style。
+- `wechat_convert.py` 继承 `Converter`：外链会被微信去掉，改为在链接文字后附纯文本网址（`--no-link-urls` 只留链接文字，配合 `--source-url` 把「阅读原文」指向知乎版，用于超 2 万字时）；公式用 matplotlib 渲染成 PNG 上传，`\text{}` 转成 `\mathsf{}` 并指向系统 CJK 字体，所以可以写中文；样式全部写成内联 style。
 - 图片必须是小于 1MB 的 jpg/png，`images.shrink()` 负责压缩。微信保存时把 `src` 改成 `data-src`，属于正常现象。
 - 2 万字限制按可见文字算，不算标签。
 - 映射记在 `state.json` 的 `wechat` 键下；封面默认取第一张图，只上传一次。

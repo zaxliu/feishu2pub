@@ -110,3 +110,21 @@ def test_unknown_block_placeholder():
     c, out = conv('<sheet token="s"/>')
     assert out == "<p>[飞书 sheet 块未导出]</p>"
     assert c.warnings
+
+
+def test_drop_section_removes_only_that_section():
+    from feishu2pub.convert import drop_section
+    html = '<h2>1. 正文</h2><p>a</p><h2 style="x">2. 附录：x</h2><h3>sub</h3><p>b</p><h2>3. 参考资料</h2><p>c</p>'
+    out, n = drop_section(html, "附录")
+    assert out == '<h2>1. 正文</h2><p>a</p><h2>2. 参考资料</h2><p>c</p>'
+    assert n == 1
+    assert drop_section(html, "不存在") == (html, 0)
+    tail = '<h2>1. 正文</h2><p>a</p><h2>2. 附录</h2><p>b</p>'
+    assert drop_section(tail, "附录") == ('<h2>1. 正文</h2><p>a</p>', 1)
+
+
+def test_drop_section_renumbers_following_headings():
+    from feishu2pub.convert import drop_section
+    html = '<h2>1. 正文</h2><h2>2. 附录</h2><p>b</p><h2>3. 参考资料</h2><h3>3.1 子节</h3>'
+    out, _ = drop_section(html, "附录")
+    assert out == '<h2>1. 正文</h2><h2>2. 参考资料</h2><h3>2.1 子节</h3>'

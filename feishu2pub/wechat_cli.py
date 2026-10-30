@@ -1,6 +1,6 @@
 """Import a Feishu doc into a WeChat Official Account draft (never publishes).
 
-    python -m feishu2pub wechat <feishu docx/wiki URL> [--dry-run] [--new]
+    python -m feishu2pub wechat <feishu docx/wiki URL> [--dry-run] [--new] [--no-link-urls] [--source-url URL] [--cut-from TEXT]
 """
 
 from __future__ import annotations
@@ -17,10 +17,10 @@ from PIL import Image
 
 from . import feishu
 from .state import OUT, ROOT, load_state, save_state
-from .convert import ImageRef, collect_images
+from .convert import ImageRef, collect_images, drop_section
 from .images import Prepared, prepare, shrink
 from .wechat import Wechat, WechatError
-from .wechat_convert import WechatConverter, formula_texts, render_formula
+from .wechat_convert import WechatConverter, cut_at_heading, formula_texts, render_formula
 from .zhihu import load_env
 
 
@@ -30,6 +30,15 @@ def main(argv: Optional[list[str]] = None) -> int:
     ap.add_argument("--dry-run", action="store_true", help="convert locally, skip all WeChat calls")
     ap.add_argument("--new", action="store_true", help="create a new draft even if one is mapped")
     ap.add_argument("--author", default="", help="author shown on the article")
+    ap.add_argument("--no-link-urls", action="store_true",
+                    help="drop the plain-text URL after each link (saves characters; pair with --source-url)")
+    ap.add_argument("--source-url", default="", help="阅读原文 link, e.g. the published Zhihu article")
+    ap.add_argument("--cut-from", default="",
+                    help="drop the section whose h1 contains this text and everything after it (e.g. 附录)")
+    ap.add_argument("--drop-section", action="append", default=[],
+                    help="leave out the section whose h1 contains this text (repeatable, e.g. 附录)")
+    ap.add_argument("--cut-note", default="附录和参考资料见文末「阅读原文」的完整版。",
+                    help="paragraph appended where --cut-from cut the article")
     args = ap.parse_args(argv)
 
     load_env(ROOT / ".env")
@@ -94,8 +103,15 @@ def main(argv: Optional[list[str]] = None) -> int:
             formulas[tex] = None
             print(f"  formula {i} FAILED: {e}")
 
-    conv = WechatConverter(lambda ref: resolved.get(ref), lambda tex: formulas.get(tex))
+    conv = WechatConverter(lambda ref: resolved.get(ref), lambda tex: formulas.get(tex),
+                           link_urls=not args.no_link_urls)
     body = conv.convert(doc["xml"])
+    for needle in args.drop_section:
+        body, n = drop_section(body, needle)
+        print(f"  dropped {n} section(s) with heading containing {needle!r}")
+    if args.cut_from:
+        body, n = cut_at_heading(body, args.cut_from, args.cut_note)
+        print(f"  cut {n} trailing sections from the first heading containing {args.cut_from!r}")
     title = conv.title or "未命名"
     work.mkdir(parents=True, exist_ok=True)
     (work / "wechat.html").write_text(
@@ -131,6 +147,7 @@ def main(argv: Optional[list[str]] = None) -> int:
         "author": args.author,
         "content": body,
         "thumb_media_id": cover,
+        "content_source_url": args.source_url,
         "need_open_comment": 1,
         "only_fans_can_comment": 0,
     }

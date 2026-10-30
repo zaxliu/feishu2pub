@@ -116,6 +116,26 @@ Resolver = Callable[[ImageRef], Optional[dict]]
 # ---- helpers ---------------------------------------------------------------
 
 
+def drop_section(html: str, needle: str) -> tuple[str, int]:
+    """Remove the first <h2> section whose heading text contains `needle`, up to the next <h2>.
+
+    Returns (html, number of sections dropped). Used to leave an appendix out of the published copy.
+    """
+    heads = list(re.finditer(r"<h2[^>]*>(.*?)</h2>", html, re.S))
+    for i, m in enumerate(heads):
+        if needle in re.sub(r"<[^>]+>", "", m.group(1)):
+            end = heads[i + 1].start() if i + 1 < len(heads) else len(html)
+            num = re.match(r"(\d+)\.", re.sub(r"<[^>]+>", "", m.group(1)))
+            tail = html[end:]
+            if num:  # shift the seq markers of later headings down by one
+                cut = int(num.group(1))
+                tail = re.sub(r"(<h[23][^>]*>)(\d+)(?=[. ])",
+                              lambda t: t.group(1) + str(int(t.group(2)) - 1 if int(t.group(2)) > cut else t.group(2)),
+                              tail)
+            return html[:m.start()] + tail, 1
+    return html, 0
+
+
 def esc(s: str) -> str:
     return html.escape(s, quote=False)
 
